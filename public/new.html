@@ -2,18 +2,31 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>发帖 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=2">
+<script>
+(function(){
+  var t = localStorage.getItem('forum-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 </head>
 <body>
+<div class="scroll-progress" id="scrollProgress"></div>
+<div class="hero-orb"></div>
+<div class="hero-orb-2"></div>
+
 <nav class="nav">
   <a href="/" class="brand">LouFung 论坛</a>
   <span id="nav-right"></span>
+  <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
 </nav>
+
 <div class="container">
   <div class="card">
     <h1>发新帖</h1>
+    <p class="sub">说点什么吧</p>
     <div class="error" id="err"></div>
     <div class="form-group">
       <label>标题</label>
@@ -21,17 +34,30 @@
     </div>
     <div class="form-group">
       <label>内容</label>
-      <textarea id="content" rows="10" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--fg);font-family:inherit;resize:vertical" placeholder="随便写点什么"></textarea>
+      <textarea id="content" rows="10" placeholder="随便写点什么"></textarea>
     </div>
     <button class="btn" id="submitBtn" onclick="doPost()">发布</button>
   </div>
 </div>
 <script>
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('forum-theme', next);
+  document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+}
+(function(){
+  const t = document.documentElement.getAttribute('data-theme');
+  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+})();
+
 async function init() {
   const me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
   if (!me.user) { location.href = '/login.html'; return; }
-  document.getElementById('nav-right').innerHTML = '<span style="font-size:13px;color:var(--muted)">' + me.user.username + '</span>';
+  document.getElementById('nav-right').innerHTML = '<span style="font-size:13px;color:var(--text-muted)">' + me.user.username + '</span>';
 }
+
 async function doPost() {
   const btn = document.getElementById('submitBtn');
   const err = document.getElementById('err');
@@ -53,6 +79,7 @@ async function doPost() {
   } catch (e) { err.textContent = '网络错误'; }
   finally { btn.disabled = false; btn.textContent = '发布'; }
 }
+
 init();
 </script>
 </body>

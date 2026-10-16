@@ -208,18 +208,18 @@ function serveStatic(req, res, p) {
 
 function handleListPosts(req, res) {
   const rows = db.prepare(
-    'SELECT p.id, p.title, p.created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.status = ? ORDER BY p.id DESC LIMIT 100'
+    "SELECT p.id, p.title, datetime(p.created_at, '+8 hours') as created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.status = ? ORDER BY p.id DESC LIMIT 100"
   ).all('approved');
   sendJSON(res, 200, { posts: rows });
 }
 
 function handleGetPost(req, res, id) {
   const post = db.prepare(
-    'SELECT p.id, p.title, p.content, p.created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ? AND p.status = ?'
+    "SELECT p.id, p.title, p.content, datetime(p.created_at, '+8 hours') as created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ? AND p.status = ?"
   ).get(id, 'approved');
   if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
   const comments = db.prepare(
-    'SELECT c.id, c.content, c.created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.status = ? ORDER BY c.id ASC'
+    "SELECT c.id, c.content, datetime(c.created_at, '+8 hours') as created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.status = ? ORDER BY c.id ASC"
   ).all(id, 'approved');
   sendJSON(res, 200, { post, comments });
 }

@@ -2,54 +2,73 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>帖子 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=2">
+<script>
+(function(){
+  var t = localStorage.getItem('forum-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 </head>
 <body>
+<div class="scroll-progress" id="scrollProgress"></div>
+<div class="hero-orb"></div>
+<div class="hero-orb-2"></div>
+
 <nav class="nav">
   <a href="/" class="brand">LouFung 论坛</a>
   <span id="nav-right"></span>
+  <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
 </nav>
+
 <div class="container">
-  <div class="card">
-    <h1 id="title">加载中...</h1>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="meta"></div>
-    <div id="content" style="white-space:pre-wrap;line-height:1.8"></div>
+  <div class="card" style="margin-bottom:20px">
+    <h1 id="title" style="font-size:24px">加载中...</h1>
+    <div class="meta" id="meta" style="margin-top:8px"></div>
+    <div id="content" style="white-space:pre-wrap;line-height:1.8;margin-top:18px"></div>
   </div>
   <div class="card">
     <h2>评论</h2>
-    <div id="comments"></div>
-    <div id="commentForm" style="margin-top:20px;display:none">
+    <div id="comments" style="margin-top:16px"></div>
+    <div id="commentForm" style="margin-top:24px;display:none">
       <div class="error" id="cerr"></div>
       <div class="form-group">
-        <textarea id="ccontent" rows="3" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--fg);font-family:inherit;resize:vertical" placeholder="写评论（提交后需审核）"></textarea>
+        <textarea id="ccontent" rows="3" placeholder="写评论（提交后需审核）"></textarea>
       </div>
-      <button class="btn" id="cbtn" style="width:auto;padding:9px 18px" onclick="doComment()">发评论</button>
+      <button class="btn small" id="cbtn" onclick="doComment()">发评论</button>
     </div>
-    <div id="cLoginTip" style="display:none;font-size:13px;color:var(--muted);margin-top:16px">
+    <div id="cLoginTip" style="display:none;font-size:13px;color:var(--text-muted);margin-top:16px">
       请 <a class="link" href="/login.html">登录</a> 后评论
     </div>
   </div>
 </div>
 <script>
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('forum-theme', next);
+  document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+}
+(function(){
+  const t = document.documentElement.getAttribute('data-theme');
+  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+})();
+
+window.addEventListener('scroll', () => {
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  const p = h > 0 ? (window.scrollY / h) * 100 : 0;
+  document.getElementById('scrollProgress').style.width = p + '%';
+}, { passive: true });
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
 const postId = new URLSearchParams(location.search).get('id');
 let me = null;
-
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-async function init() {
-  me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
-  const nav = document.getElementById('nav-right');
-  if (me.user) {
-    nav.innerHTML = '<span style="font-size:13px;color:var(--muted)">' + esc(me.user.username) + '</span>';
-    document.getElementById('commentForm').style.display = 'block';
-  } else {
-    nav.innerHTML = '<a href="/login.html">登录</a>';
-    document.getElementById('cLoginTip').style.display = 'block';
-  }
-  await loadPost();
-}
 
 async function loadPost() {
   if (!postId) { document.getElementById('title').textContent = '缺少帖子 ID'; return; }
@@ -70,13 +89,14 @@ async function loadPost() {
 function renderComments(list) {
   const box = document.getElementById('comments');
   if (!list || list.length === 0) {
-    box.innerHTML = '<div style="color:var(--muted);font-size:13px">还没有评论</div>';
+    box.innerHTML = '<div style="color:var(--text-muted);font-size:13px">还没有评论</div>';
     return;
   }
   box.innerHTML = list.map(c =>
-    '<div style="padding:12px 0;border-bottom:1px solid var(--border)">' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">' + esc(c.username) + ' · ' + c.created_at + '</div>' +
-    '<div style="white-space:pre-wrap">' + esc(c.content) + '</div></div>'
+    '<div style="padding:14px 0;border-top:1px solid var(--card-border)">' +
+      '<div class="meta" style="margin-bottom:6px">' + esc(c.username) + ' · ' + c.created_at + '</div>' +
+      '<div style="white-space:pre-wrap">' + esc(c.content) + '</div>' +
+    '</div>'
   ).join('');
 }
 
@@ -106,6 +126,19 @@ async function doComment() {
     err.style.color = '#e5484d';
     err.textContent = '网络错误';
   } finally { btn.disabled = false; btn.textContent = '发评论'; }
+}
+
+async function init() {
+  me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  const nav = document.getElementById('nav-right');
+  if (me.user) {
+    nav.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">' + esc(me.user.username) + '</span>';
+    document.getElementById('commentForm').style.display = 'block';
+  } else {
+    nav.innerHTML = '<a href="/login.html">登录</a>';
+    document.getElementById('cLoginTip').style.display = 'block';
+  }
+  await loadPost();
 }
 
 init();
