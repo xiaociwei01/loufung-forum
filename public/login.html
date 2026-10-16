@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>登录 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=2">
+<link rel="stylesheet" href="/style.css?v=113">
 <script>
 (function(){
   var t = localStorage.getItem('forum-theme') || 'light';
@@ -20,7 +20,6 @@
 <nav class="nav">
   <a href="/" class="brand">LouFung 论坛</a>
   <a href="/register.html">注册</a>
-  <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
 </nav>
 
 <div class="container narrow">
@@ -56,10 +55,6 @@ function toggleTheme() {
   localStorage.setItem('forum-theme', next);
   document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
 }
-(function(){
-  const t = document.documentElement.getAttribute('data-theme');
-  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
-})();
 
 window.addEventListener('scroll', () => {
   const h = document.documentElement.scrollHeight - window.innerHeight;

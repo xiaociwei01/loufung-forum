@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>帖子 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=2">
+<link rel="stylesheet" href="/style.css?v=113">
 <script>
 (function(){
   var t = localStorage.getItem('forum-theme') || 'light';
@@ -13,6 +13,9 @@
 </script>
 </head>
 <body>
+<div id="jserr" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#e5484d;color:#fff;padding:8px;font-size:12px;word-break:break-all"></div>
+<script>window.onerror=function(m,u,l){var e=document.getElementById('jserr');if(e){e.style.display='block';e.textContent='JS错误 行'+l+': '+m;}};</script>
+
 <div class="scroll-progress" id="scrollProgress"></div>
 <div class="hero-orb"></div>
 <div class="hero-orb-2"></div>
@@ -20,30 +23,46 @@
 <nav class="nav">
   <a href="/" class="brand">LouFung 论坛</a>
   <span id="nav-right"></span>
-  <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
 </nav>
 
 <div class="container">
   <div class="card" style="margin-bottom:20px">
-    <h1 id="title" style="font-size:24px">加载中...</h1>
-    <div class="meta" id="meta" style="margin-top:8px"></div>
-    <div id="content" style="white-space:pre-wrap;line-height:1.8;margin-top:18px"></div>
+    <div class="post-head">
+      <div class="author-row" id="authorRow" style="display:none">
+        <div class="avatar" id="postAvatar"></div>
+        <span class="author-name" id="postAuthor"></span>
+        <span class="author-time" id="postTime"></span>
+      </div>
+      <h1 class="post-title-detail" id="title">加载中...</h1>
+      <div class="post-content" id="content"></div>
+    </div>
   </div>
   <div class="card">
     <h2>评论</h2>
     <div id="comments" style="margin-top:16px"></div>
-    <div id="commentForm" style="margin-top:24px;display:none">
-      <div class="error" id="cerr"></div>
-      <div class="form-group">
-        <textarea id="ccontent" rows="3" placeholder="写评论（提交后需审核）"></textarea>
-      </div>
-      <button class="btn small" id="cbtn" onclick="doComment()">发评论</button>
-    </div>
-    <div id="cLoginTip" style="display:none;font-size:13px;color:var(--text-muted);margin-top:16px">
-      请 <a class="link" href="/login.html">登录</a> 后评论
-    </div>
   </div>
 </div>
+<div class="bottom-bar">
+  <div class="comment-input" onclick="focusComment()">写评论...</div>
+  <div class="bar-actions">
+    <button class="bar-act" id="actLike" title="点赞"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg><span id="actLikeNum">0</span></button>
+    <button class="bar-act" id="actComment" title="评论" onclick="focusComment()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><span id="actCommentNum">0</span></button>
+    <button class="bar-act" id="actFav" title="收藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span id="actFavNum">0</span></button>
+    <button class="bar-act" id="actShare" title="转发"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span id="actShareNum">0</span></button>
+  </div>
+</div>
+
+<div class="comment-panel" id="commentPanel">
+  <div class="comment-panel-inner">
+    <div class="comment-panel-head">
+      <span class="comment-panel-title">写评论</span>
+      <span class="comment-panel-close" onclick="closeCommentPanel()">✕</span>
+    </div>
+    <textarea id="panelInput" placeholder="说点什么..." rows="3"></textarea>
+    <button class="btn" id="panelBtn" onclick="submitPanelComment()">发布</button>
+  </div>
+</div>
+
 <script>
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') || 'light';
@@ -52,10 +71,6 @@ function toggleTheme() {
   localStorage.setItem('forum-theme', next);
   document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
 }
-(function(){
-  const t = document.documentElement.getAttribute('data-theme');
-  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
-})();
 
 window.addEventListener('scroll', () => {
   const h = document.documentElement.scrollHeight - window.innerHeight;
@@ -65,6 +80,13 @@ window.addEventListener('scroll', () => {
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function avatarHTML(name) {
+  const colors = ['#4d6bfe','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return '<div class="avatar" style="background:' + colors[h % colors.length] + '">' + (name[0] || '?').toUpperCase() + '</div>';
 }
 
 const postId = new URLSearchParams(location.search).get('id');
@@ -78,8 +100,12 @@ async function loadPost() {
     if (!d.post) { document.getElementById('title').textContent = '帖子不存在'; return; }
     document.title = d.post.title + ' · LouFung 论坛';
     document.getElementById('title').textContent = d.post.title;
-    document.getElementById('meta').textContent = d.post.username + ' · ' + d.post.created_at;
+    document.getElementById('postAvatar').outerHTML = avatarHTML(d.post.username).replace('class="avatar"', 'class="avatar" id="postAvatar"');
+    document.getElementById('postAuthor').textContent = d.post.username;
+    document.getElementById('postTime').textContent = d.post.created_at;
+    document.getElementById('authorRow').style.display = 'flex';
     document.getElementById('content').textContent = d.post.content;
+    fillBottomBar(d.post);
     renderComments(d.comments);
   } catch (e) {
     document.getElementById('title').textContent = '加载失败';
@@ -89,24 +115,179 @@ async function loadPost() {
 function renderComments(list) {
   const box = document.getElementById('comments');
   if (!list || list.length === 0) {
-    box.innerHTML = '<div style="color:var(--text-muted);font-size:13px">还没有评论</div>';
+    box.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px 0;text-align:center">暂时还没有评论，快来评论一下吧～</div>';
     return;
   }
-  box.innerHTML = list.map(c =>
-    '<div style="padding:14px 0;border-top:1px solid var(--card-border)">' +
-      '<div class="meta" style="margin-bottom:6px">' + esc(c.username) + ' · ' + c.created_at + '</div>' +
-      '<div style="white-space:pre-wrap">' + esc(c.content) + '</div>' +
-    '</div>'
-  ).join('');
+  box.innerHTML = list.map(c => renderOne(c, 0)).join('');
 }
 
-async function doComment() {
-  const btn = document.getElementById('cbtn');
-  const err = document.getElementById('cerr');
-  const content = document.getElementById('ccontent').value.trim();
-  err.textContent = '';
-  if (!content) { err.textContent = '内容不能为空'; return; }
-  btn.disabled = true; btn.textContent = '提交中...';
+function renderOne(c, depth) {
+  const nested = depth > 0 ? 'nested' : '';
+  const likedCls = c.liked_by_me ? ' liked' : '';
+  let html = '<div class="cmt ' + nested + '">' +
+    avatarHTML(c.username) +
+    '<div class="cmt-body">' +
+      '<div class="cmt-head">' +
+        '<span class="author-name">' + esc(c.username) + '</span>' +
+      '</div>' +
+      '<div class="cmt-content">' + esc(c.content) + '</div>' +
+      '<div class="cmt-foot">' +
+        '<span>' + c.created_at + '</span>' +
+        '<div class="cmt-acts">' +
+          '<span class="cmt-act' + likedCls + '" data-like="' + c.id + '">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>' +
+            '<span>' + (c.like_count || 0) + '</span>' +
+          '</span>' +
+          '<span class="cmt-act" data-reply="' + c.id + '">回复</span>' +
+        '</div>' +
+      '</div>' +
+      '<div id="reply-box-' + c.id + '" style="display:none;margin-top:10px">' +
+        '<textarea id="reply-input-' + c.id + '" rows="2" placeholder="回复..." style="width:100%;padding:9px 12px;border:1px solid var(--card-border);border-radius:8px;font-size:14px;background:var(--bg-body);color:var(--text-primary);font-family:inherit;resize:none"></textarea>' +
+        '<div style="display:flex;gap:8px;margin-top:8px">' +
+          '<button class="btn small" data-submit="' + c.id + '">发送</button>' +
+          '<button class="btn small ghost" data-cancel="' + c.id + '">取消</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  if (c.replies && c.replies.length) {
+    html += c.replies.map(r => renderOne(r, depth + 1)).join('');
+  }
+  return html;
+}
+
+function replyTo(cid) {
+  if (!me || !me.user) { location.href = '/login.html'; return; }
+  const box = document.getElementById('reply-box-' + cid);
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if (box.style.display === 'block') document.getElementById('reply-input-' + cid).focus();
+}
+
+async function submitReply(cid) {
+  const ta = document.getElementById('reply-input-' + cid);
+  const content = ta.value.trim();
+  if (!content) return;
+  try {
+    const r = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_id: Number(postId), content, parent_id: cid })
+    });
+    const d = await r.json();
+    if (d.ok) { await loadPost(); }
+    else { alert(d.error || '发送失败'); }
+  } catch (e) { alert('网络错误'); }
+}
+
+async function likeComment(cid, el) {
+  if (!me || !me.user) { location.href = '/login.html'; return; }
+  try {
+    const r = await fetch('/api/comments/' + cid + '/like', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      const numEl = el.querySelector('span');
+      const cur = parseInt(numEl.textContent) || 0;
+      numEl.textContent = d.liked ? cur + 1 : Math.max(0, cur - 1);
+      el.classList.toggle('liked', d.liked);
+    }
+  } catch (e) {}
+}
+
+async function init() {
+  me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  const nav = document.getElementById('nav-right');
+  if (me.user) {
+    nav.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">' + esc(me.user.username) + '</span>';
+  } else {
+    nav.innerHTML = '<a href="/login.html">登录</a>';
+  }
+  await loadPost();
+}
+
+function fillBottomBar(post) {
+  document.getElementById('actLikeNum').textContent = post.like_count || 0;
+  document.getElementById('actCommentNum').textContent = post.comment_count || 0;
+  document.getElementById('actFavNum').textContent = post.fav_count || 0;
+  document.getElementById('actShareNum').textContent = post.share_count || 0;
+  if (post.liked_by_me) {
+    document.getElementById('actLike').style.color = 'var(--accent)';
+  }
+  if (post.faved_by_me) {
+    document.getElementById('actFav').style.color = 'var(--accent)';
+  }
+}
+
+async function togglePostLike() {
+  if (!me || !me.user) { location.href = '/login.html'; return; }
+  try {
+    const r = await fetch('/api/posts/' + postId + '/like', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      const el = document.getElementById('actLikeNum');
+      const cur = parseInt(el.textContent) || 0;
+      el.textContent = d.liked ? cur + 1 : Math.max(0, cur - 1);
+      document.getElementById('actLike').style.color = d.liked ? 'var(--accent)' : '';
+    }
+  } catch (e) {}
+}
+
+async function togglePostFav() {
+  if (!me || !me.user) { location.href = '/login.html'; return; }
+  try {
+    const r = await fetch('/api/posts/' + postId + '/fav', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      const el = document.getElementById('actFavNum');
+      const cur = parseInt(el.textContent) || 0;
+      el.textContent = d.fav ? cur + 1 : Math.max(0, cur - 1);
+      document.getElementById('actFav').style.color = d.fav ? 'var(--accent)' : '';
+    }
+  } catch (e) {}
+}
+
+async function sharePost() {
+  if (me && me.user) {
+    try {
+      const r = await fetch('/api/posts/' + postId + '/share', { method: 'POST' });
+      const d = await r.json();
+      if (d.ok && !d.already) {
+        document.getElementById('actShareNum').textContent = d.share_count;
+      }
+    } catch (e) {}
+  }
+  if (navigator.share) {
+    navigator.share({ title: document.title, url: location.href }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(location.href)
+      .then(() => alert('链接已复制'))
+      .catch(() => prompt('复制链接', location.href));
+  }
+}
+
+function fallbackCopy(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => alert('链接已复制')).catch(() => prompt('复制链接：', text));
+  } else {
+    prompt('复制链接：', text);
+  }
+}
+
+function focusComment() {
+  if (!me || !me.user) { location.href = '/login.html'; return; }
+  document.getElementById('commentPanel').classList.add('active');
+  setTimeout(() => document.getElementById('panelInput').focus(), 300);
+}
+
+function closeCommentPanel() {
+  document.getElementById('commentPanel').classList.remove('active');
+}
+
+async function submitPanelComment() {
+  const btn = document.getElementById('panelBtn');
+  const input = document.getElementById('panelInput');
+  const content = input.value.trim();
+  if (!content) return;
+  btn.disabled = true; btn.textContent = '发布中...';
   try {
     const r = await fetch('/api/comments', {
       method: 'POST',
@@ -115,33 +296,41 @@ async function doComment() {
     });
     const d = await r.json();
     if (d.ok) {
-      document.getElementById('ccontent').value = '';
-      err.style.color = 'var(--accent)';
-      err.textContent = '已提交，等待审核';
+      input.value = '';
+      closeCommentPanel();
+      alert('已提交，等待审核');
     } else {
-      err.style.color = '#e5484d';
-      err.textContent = d.error || '提交失败';
+      alert(d.error || '提交失败');
     }
   } catch (e) {
-    err.style.color = '#e5484d';
-    err.textContent = '网络错误';
-  } finally { btn.disabled = false; btn.textContent = '发评论'; }
-}
-
-async function init() {
-  me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
-  const nav = document.getElementById('nav-right');
-  if (me.user) {
-    nav.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">' + esc(me.user.username) + '</span>';
-    document.getElementById('commentForm').style.display = 'block';
-  } else {
-    nav.innerHTML = '<a href="/login.html">登录</a>';
-    document.getElementById('cLoginTip').style.display = 'block';
+    alert('网络错误');
+  } finally {
+    btn.disabled = false; btn.textContent = '发布';
   }
-  await loadPost();
 }
 
-init();
+document.getElementById('commentPanel').addEventListener('click', (e) => {
+  if (e.target.id === 'commentPanel') closeCommentPanel();
+});
+
+document.body.classList.add('has-bottom-bar');
+document.getElementById('actLike').onclick = togglePostLike;
+document.getElementById('actFav').onclick = togglePostFav;
+document.getElementById('actShare').onclick = sharePost;
+
+document.getElementById('comments').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-like],[data-reply],[data-submit],[data-cancel]');
+  if (!t) return;
+  if (t.dataset.like) likeComment(Number(t.dataset.like), t);
+  else if (t.dataset.reply) replyTo(Number(t.dataset.reply));
+  else if (t.dataset.submit) submitReply(Number(t.dataset.submit));
+  else if (t.dataset.cancel) document.getElementById('reply-box-' + t.dataset.cancel).style.display = 'none';
+});
+
+init().catch(e => {
+  document.getElementById('title').textContent = '错误: ' + e.message;
+  console.error(e);
+});
 </script>
 </body>
 </html>

@@ -171,6 +171,14 @@ const server = http.createServer(async (req, res) => {
     const mPost = p.match(/^\/api\/posts\/(\d+)$/);
     if (p === '/api/posts' && req.method === 'GET') return handleListPosts(req, res);
     if (p === '/api/comments' && req.method === 'POST') return handleCreateComment(req, res);
+    const mPostLike = p.match(/^\/api\/posts\/(\d+)\/like$/);
+    if (mPostLike && req.method === 'POST') return handleLikePost(req, res, Number(mPostLike[1]));
+    const mPostShare = p.match(/^\/api\/posts\/(\d+)\/share$/);
+    if (mPostShare && req.method === 'POST') return handleSharePost(req, res, Number(mPostShare[1]));
+    const mPostFav = p.match(/^\/api\/posts\/(\d+)\/fav$/);
+    if (mPostFav && req.method === 'POST') return handleFavPost(req, res, Number(mPostFav[1]));
+    const mLike = p.match(/^\/api\/comments\/(\d+)\/like$/);
+    if (mLike && req.method === 'POST') return handleLikeComment(req, res, Number(mLike[1]));
     if (p === '/api/posts' && req.method === 'POST') return handleCreatePost(req, res);
     if (mPost && req.method === 'GET') return handleGetPost(req, res, Number(mPost[1]));
     if (p === '/api/register' && req.method === 'POST') return handleRegister(req, res);
@@ -208,20 +216,36 @@ function serveStatic(req, res, p) {
 
 function handleListPosts(req, res) {
   const rows = db.prepare(
-    "SELECT p.id, p.title, datetime(p.created_at, '+8 hours') as created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.status = ? ORDER BY p.id DESC LIMIT 100"
+    "SELECT p.id, p.title, p.content, strftime('%Y-%m-%d %H:%M', p.created_at, '+8 hours') as created_at, u.username, (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id) as like_count, (SELECT COUNT(*) FROM post_shares ps WHERE ps.post_id = p.id) as share_count, (SELECT COUNT(*) FROM post_favorites pf WHERE pf.post_id = p.id) as fav_count, (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 'approved') as comment_count FROM posts p JOIN users u ON u.id = p.user_id WHERE p.status = ? ORDER BY p.id DESC LIMIT 100"
   ).all('approved');
   sendJSON(res, 200, { posts: rows });
 }
 
 function handleGetPost(req, res, id) {
+  const me = getSession(req);
+  const meId = me ? me.id : -1;
+
   const post = db.prepare(
-    "SELECT p.id, p.title, p.content, datetime(p.created_at, '+8 hours') as created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ? AND p.status = ?"
-  ).get(id, 'approved');
+    "SELECT p.id, p.title, p.content, strftime('%Y-%m-%d %H:%M', p.created_at, '+8 hours') as created_at, u.username, (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id) as like_count, (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = ?) as liked_by_me, (SELECT COUNT(*) FROM post_shares ps WHERE ps.post_id = p.id) as share_count, (SELECT COUNT(*) FROM post_favorites pf WHERE pf.post_id = p.id) as fav_count, (SELECT COUNT(*) FROM post_favorites pf WHERE pf.post_id = p.id AND pf.user_id = ?) as faved_by_me, (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 'approved') as comment_count FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ? AND p.status = ?"
+  ).get(meId, meId, id, 'approved');
   if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
-  const comments = db.prepare(
-    "SELECT c.id, c.content, datetime(c.created_at, '+8 hours') as created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.status = ? ORDER BY c.id ASC"
-  ).all(id, 'approved');
-  sendJSON(res, 200, { post, comments });
+
+  const rows = db.prepare(
+    "SELECT c.id, c.content, c.parent_id, strftime('%Y-%m-%d %H:%M', c.created_at, '+8 hours') as created_at, u.username, (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = c.id) as like_count, (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = ?) as liked_by_me FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.status = ? ORDER BY c.id ASC"
+  ).all(meId, id, 'approved');
+
+  // 组装树形
+  const map = {};
+  rows.forEach(r => { r.replies = []; map[r.id] = r; });
+  const top = [];
+  rows.forEach(r => {
+    if (r.parent_id && map[r.parent_id]) {
+      map[r.parent_id].replies.push(r);
+    } else {
+      top.push(r);
+    }
+  });
+  sendJSON(res, 200, { post, comments: top });
 }
 
 async function handleCreatePost(req, res) {
@@ -249,14 +273,80 @@ async function handleCreateComment(req, res) {
   try { data = JSON.parse(body); } catch { return sendJSON(res, 400, { error: '格式错误' }); }
   const postId = Number(data.post_id);
   const content = (data.content || '').trim();
+  const parentId = data.parent_id ? Number(data.parent_id) : null;
   if (!postId) return sendJSON(res, 400, { error: '缺少帖子 ID' });
   if (content.length < 1 || content.length > 2000) return sendJSON(res, 400, { error: '评论 1-2000 字' });
   const post = db.prepare('SELECT id FROM posts WHERE id = ? AND status = ?').get(postId, 'approved');
   if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
-  db.prepare(
-    'INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)'
-  ).run(postId, user.id, content);
-  sendJSON(res, 200, { ok: true });
+  if (parentId) {
+    const parent = db.prepare('SELECT id FROM comments WHERE id = ? AND post_id = ?').get(parentId, postId);
+    if (!parent) return sendJSON(res, 400, { error: '被回复的评论不存在' });
+  }
+  const info = db.prepare(
+    'INSERT INTO comments (post_id, user_id, content, status, parent_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(postId, user.id, content, 'approved', parentId);
+  sendJSON(res, 200, { ok: true, id: info.lastInsertRowid });
+}
+
+
+function handleLikeComment(req, res, id) {
+  const user = getSession(req);
+  if (!user) return sendJSON(res, 401, { error: '请先登录' });
+  const comment = db.prepare('SELECT id FROM comments WHERE id = ?').get(id);
+  if (!comment) return sendJSON(res, 404, { error: '评论不存在' });
+  const liked = db.prepare('SELECT 1 FROM comment_likes WHERE user_id = ? AND comment_id = ?').get(user.id, id);
+  if (liked) {
+    db.prepare('DELETE FROM comment_likes WHERE user_id = ? AND comment_id = ?').run(user.id, id);
+    sendJSON(res, 200, { ok: true, liked: false });
+  } else {
+    db.prepare('INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)').run(user.id, id);
+    sendJSON(res, 200, { ok: true, liked: true });
+  }
+}
+
+
+function handleLikePost(req, res, id) {
+  const user = getSession(req);
+  if (!user) return sendJSON(res, 401, { error: '请先登录' });
+  const post = db.prepare('SELECT id FROM posts WHERE id = ? AND status = ?').get(id, 'approved');
+  if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
+  const liked = db.prepare('SELECT 1 FROM post_likes WHERE user_id = ? AND post_id = ?').get(user.id, id);
+  if (liked) {
+    db.prepare('DELETE FROM post_likes WHERE user_id = ? AND post_id = ?').run(user.id, id);
+    sendJSON(res, 200, { ok: true, liked: false });
+  } else {
+    db.prepare('INSERT INTO post_likes (user_id, post_id) VALUES (?, ?)').run(user.id, id);
+    sendJSON(res, 200, { ok: true, liked: true });
+  }
+}
+
+function handleFavPost(req, res, id) {
+  const user = getSession(req);
+  if (!user) return sendJSON(res, 401, { error: '请先登录' });
+  const post = db.prepare('SELECT id FROM posts WHERE id = ? AND status = ?').get(id, 'approved');
+  if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
+  const fav = db.prepare('SELECT 1 FROM post_favorites WHERE user_id = ? AND post_id = ?').get(user.id, id);
+  if (fav) {
+    db.prepare('DELETE FROM post_favorites WHERE user_id = ? AND post_id = ?').run(user.id, id);
+    sendJSON(res, 200, { ok: true, fav: false });
+  } else {
+    db.prepare('INSERT INTO post_favorites (user_id, post_id) VALUES (?, ?)').run(user.id, id);
+    sendJSON(res, 200, { ok: true, fav: true });
+  }
+}
+
+
+function handleSharePost(req, res, id) {
+  const user = getSession(req);
+  if (!user) return sendJSON(res, 401, { error: '请先登录' });
+  const post = db.prepare('SELECT id FROM posts WHERE id = ? AND status = ?').get(id, 'approved');
+  if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
+  const existing = db.prepare('SELECT 1 FROM post_shares WHERE user_id = ? AND post_id = ?').get(user.id, id);
+  if (!existing) {
+    db.prepare('INSERT INTO post_shares (user_id, post_id) VALUES (?, ?)').run(user.id, id);
+  }
+  const count = db.prepare('SELECT COUNT(*) as c FROM post_shares WHERE post_id = ?').get(id).c;
+  sendJSON(res, 200, { ok: true, share_count: count, already: !!existing });
 }
 
 server.listen(PORT, () => {

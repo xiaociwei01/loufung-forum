@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>注册 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=2">
+<link rel="stylesheet" href="/style.css?v=113">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script>
 (function(){
@@ -21,7 +21,6 @@
 <nav class="nav">
   <a href="/" class="brand">LouFung 论坛</a>
   <a href="/login.html">登录</a>
-  <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
 </nav>
 
 <div class="container narrow">
@@ -58,10 +57,6 @@ function toggleTheme() {
   localStorage.setItem('forum-theme', next);
   document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
 }
-(function(){
-  const t = document.documentElement.getAttribute('data-theme');
-  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
-})();
 
 function togglePwd(id, btn) {
   const inp = document.getElementById(id);
