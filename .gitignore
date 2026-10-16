@@ -5,3 +5,5 @@ db/
 .turnstile-secret
 forum.log
 node_modules/
+*.bak
+*.bak2
