@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>登录 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=113">
+<link rel="stylesheet" href="/style.css?v=121">
 <script>
 (function(){
   var t = localStorage.getItem('forum-theme') || 'light';
@@ -13,7 +13,6 @@
 </script>
 </head>
 <body>
-<div class="scroll-progress" id="scrollProgress"></div>
 <div class="hero-orb"></div>
 <div class="hero-orb-2"></div>
 
@@ -55,12 +54,6 @@ function toggleTheme() {
   localStorage.setItem('forum-theme', next);
   document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
 }
-
-window.addEventListener('scroll', () => {
-  const h = document.documentElement.scrollHeight - window.innerHeight;
-  const p = h > 0 ? (window.scrollY / h) * 100 : 0;
-  document.getElementById('scrollProgress').style.width = p + '%';
-}, { passive: true });
 
 function togglePwd(id, btn) {
   const inp = document.getElementById(id);

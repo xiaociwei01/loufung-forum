@@ -171,6 +171,10 @@ const server = http.createServer(async (req, res) => {
     const mPost = p.match(/^\/api\/posts\/(\d+)$/);
     if (p === '/api/posts' && req.method === 'GET') return handleListPosts(req, res);
     if (p === '/api/comments' && req.method === 'POST') return handleCreateComment(req, res);
+    const mPostDel = p.match(/^\/api\/posts\/(\d+)$/);
+    if (mPostDel && req.method === 'DELETE') return handleDeletePost(req, res, Number(mPostDel[1]));
+    const mCmtDel = p.match(/^\/api\/comments\/(\d+)$/);
+    if (mCmtDel && req.method === 'DELETE') return handleDeleteComment(req, res, Number(mCmtDel[1]));
     const mPostLike = p.match(/^\/api\/posts\/(\d+)\/like$/);
     if (mPostLike && req.method === 'POST') return handleLikePost(req, res, Number(mPostLike[1]));
     const mPostShare = p.match(/^\/api\/posts\/(\d+)\/share$/);
@@ -347,6 +351,36 @@ function handleSharePost(req, res, id) {
   }
   const count = db.prepare('SELECT COUNT(*) as c FROM post_shares WHERE post_id = ?').get(id).c;
   sendJSON(res, 200, { ok: true, share_count: count, already: !!existing });
+}
+
+
+function handleDeletePost(req, res, id) {
+  const user = getSession(req);
+  if (!user) return sendJSON(res, 401, { error: '请先登录' });
+  const post = db.prepare('SELECT user_id FROM posts WHERE id = ?').get(id);
+  if (!post) return sendJSON(res, 404, { error: '帖子不存在' });
+  if (post.user_id !== user.id) return sendJSON(res, 403, { error: '只能删自己的帖子' });
+  db.prepare('DELETE FROM posts WHERE id = ?').run(id);
+  sendJSON(res, 200, { ok: true });
+}
+
+function handleDeleteComment(req, res, id) {
+  const user = getSession(req);
+  if (!user) return sendJSON(res, 401, { error: '请先登录' });
+  const cmt = db.prepare('SELECT user_id FROM comments WHERE id = ?').get(id);
+  if (!cmt) return sendJSON(res, 404, { error: '评论不存在' });
+  if (cmt.user_id !== user.id) return sendJSON(res, 403, { error: '只能删自己的评论' });
+  // 级联：把所有直接/间接子回复也删了
+  const ids = [id];
+  let queue = [id];
+  while (queue.length) {
+    const cur = queue.shift();
+    const children = db.prepare('SELECT id FROM comments WHERE parent_id = ?').all(cur);
+    children.forEach(c => { ids.push(c.id); queue.push(c.id); });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare('DELETE FROM comments WHERE id IN (' + placeholders + ')').run(...ids);
+  sendJSON(res, 200, { ok: true, deleted: ids.length });
 }
 
 server.listen(PORT, () => {
