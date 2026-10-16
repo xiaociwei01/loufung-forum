@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LouFung 论坛</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="brand">LouFung 论坛</a>
+  <span id="nav-right"></span>
+</nav>
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <h1>讨论区</h1>
+      <p class="sub" style="margin:0">随便聊聊</p>
+    </div>
+    <button class="btn" id="newBtn" style="width:auto;padding:9px 18px;display:none" onclick="location.href='/new.html'">发帖</button>
+  </div>
+  <div id="posts"></div>
+</div>
+<script>
+async function init() {
+  const me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  const nav = document.getElementById('nav-right');
+  if (me.user) {
+    nav.innerHTML = '<span style="font-size:13px;color:var(--muted)">' + me.user.username +
+      '</span> <a href="#" onclick="logout();return false" style="margin-left:12px">退出</a>';
+    document.getElementById('newBtn').style.display = 'block';
+  } else {
+    nav.innerHTML = '<a href="/login.html">登录</a><a href="/register.html" style="margin-left:12px">注册</a>';
+  }
+  loadPosts();
+}
+
+async function loadPosts() {
+  const box = document.getElementById('posts');
+  try {
+    const r = await fetch('/api/posts');
+    const d = await r.json();
+    if (!d.posts || d.posts.length === 0) {
+      box.innerHTML = '<div class="card" style="text-align:center;color:var(--muted)">还没有帖子</div>';
+      return;
+    }
+    box.innerHTML = d.posts.map(p =>
+      '<div class="card"><a href="/post.html?id=' + p.id + '" style="text-decoration:none;color:var(--fg)">' +
+      '<h2>' + esc(p.title) + '</h2></a>' +
+      '<div style="font-size:12px;color:var(--muted)">' + esc(p.username) + ' · ' + p.created_at + '</div></div>'
+    ).join('');
+  } catch (e) {
+    box.innerHTML = '<div class="card">加载失败</div>';
+  }
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
+}
+
+init();
+</script>
+</body>
+</html>

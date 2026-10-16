@@ -1,0 +1,7 @@
+db/
+*.db
+*.db-wal
+*.db-shm
+.turnstile-secret
+forum.log
+node_modules/

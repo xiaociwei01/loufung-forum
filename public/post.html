@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>帖子 · LouFung 论坛</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="brand">LouFung 论坛</a>
+  <span id="nav-right"></span>
+</nav>
+<div class="container">
+  <div class="card">
+    <h1 id="title">加载中...</h1>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="meta"></div>
+    <div id="content" style="white-space:pre-wrap;line-height:1.8"></div>
+  </div>
+  <div class="card">
+    <h2>评论</h2>
+    <div id="comments"></div>
+    <div id="commentForm" style="margin-top:20px;display:none">
+      <div class="error" id="cerr"></div>
+      <div class="form-group">
+        <textarea id="ccontent" rows="3" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--fg);font-family:inherit;resize:vertical" placeholder="写评论（提交后需审核）"></textarea>
+      </div>
+      <button class="btn" id="cbtn" style="width:auto;padding:9px 18px" onclick="doComment()">发评论</button>
+    </div>
+    <div id="cLoginTip" style="display:none;font-size:13px;color:var(--muted);margin-top:16px">
+      请 <a class="link" href="/login.html">登录</a> 后评论
+    </div>
+  </div>
+</div>
+<script>
+const postId = new URLSearchParams(location.search).get('id');
+let me = null;
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function init() {
+  me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  const nav = document.getElementById('nav-right');
+  if (me.user) {
+    nav.innerHTML = '<span style="font-size:13px;color:var(--muted)">' + esc(me.user.username) + '</span>';
+    document.getElementById('commentForm').style.display = 'block';
+  } else {
+    nav.innerHTML = '<a href="/login.html">登录</a>';
+    document.getElementById('cLoginTip').style.display = 'block';
+  }
+  await loadPost();
+}
+
+async function loadPost() {
+  if (!postId) { document.getElementById('title').textContent = '缺少帖子 ID'; return; }
+  try {
+    const r = await fetch('/api/posts/' + postId);
+    const d = await r.json();
+    if (!d.post) { document.getElementById('title').textContent = '帖子不存在'; return; }
+    document.title = d.post.title + ' · LouFung 论坛';
+    document.getElementById('title').textContent = d.post.title;
+    document.getElementById('meta').textContent = d.post.username + ' · ' + d.post.created_at;
+    document.getElementById('content').textContent = d.post.content;
+    renderComments(d.comments);
+  } catch (e) {
+    document.getElementById('title').textContent = '加载失败';
+  }
+}
+
+function renderComments(list) {
+  const box = document.getElementById('comments');
+  if (!list || list.length === 0) {
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px">还没有评论</div>';
+    return;
+  }
+  box.innerHTML = list.map(c =>
+    '<div style="padding:12px 0;border-bottom:1px solid var(--border)">' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">' + esc(c.username) + ' · ' + c.created_at + '</div>' +
+    '<div style="white-space:pre-wrap">' + esc(c.content) + '</div></div>'
+  ).join('');
+}
+
+async function doComment() {
+  const btn = document.getElementById('cbtn');
+  const err = document.getElementById('cerr');
+  const content = document.getElementById('ccontent').value.trim();
+  err.textContent = '';
+  if (!content) { err.textContent = '内容不能为空'; return; }
+  btn.disabled = true; btn.textContent = '提交中...';
+  try {
+    const r = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_id: Number(postId), content })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('ccontent').value = '';
+      err.style.color = 'var(--accent)';
+      err.textContent = '已提交，等待审核';
+    } else {
+      err.style.color = '#e5484d';
+      err.textContent = d.error || '提交失败';
+    }
+  } catch (e) {
+    err.style.color = '#e5484d';
+    err.textContent = '网络错误';
+  } finally { btn.disabled = false; btn.textContent = '发评论'; }
+}
+
+init();
+</script>
+</body>
+</html>

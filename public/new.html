@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发帖 · LouFung 论坛</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="brand">LouFung 论坛</a>
+  <span id="nav-right"></span>
+</nav>
+<div class="container">
+  <div class="card">
+    <h1>发新帖</h1>
+    <div class="error" id="err"></div>
+    <div class="form-group">
+      <label>标题</label>
+      <input id="title" type="text" placeholder="1-100 字">
+    </div>
+    <div class="form-group">
+      <label>内容</label>
+      <textarea id="content" rows="10" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--fg);font-family:inherit;resize:vertical" placeholder="随便写点什么"></textarea>
+    </div>
+    <button class="btn" id="submitBtn" onclick="doPost()">发布</button>
+  </div>
+</div>
+<script>
+async function init() {
+  const me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  if (!me.user) { location.href = '/login.html'; return; }
+  document.getElementById('nav-right').innerHTML = '<span style="font-size:13px;color:var(--muted)">' + me.user.username + '</span>';
+}
+async function doPost() {
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('err');
+  const title = document.getElementById('title').value.trim();
+  const content = document.getElementById('content').value.trim();
+  err.textContent = '';
+  if (!title) { err.textContent = '请填标题'; return; }
+  if (!content) { err.textContent = '请填内容'; return; }
+  btn.disabled = true; btn.textContent = '发布中...';
+  try {
+    const r = await fetch('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, content })
+    });
+    const d = await r.json();
+    if (d.ok) { location.href = '/post.html?id=' + d.id; }
+    else { err.textContent = d.error || '发布失败'; }
+  } catch (e) { err.textContent = '网络错误'; }
+  finally { btn.disabled = false; btn.textContent = '发布'; }
+}
+init();
+</script>
+</body>
+</html>

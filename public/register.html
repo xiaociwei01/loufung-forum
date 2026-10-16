@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>注册 · LouFung 论坛</title>
+<link rel="stylesheet" href="/style.css">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="brand">LouFung 论坛</a>
+  <a href="/login.html">登录</a>
+</nav>
+<div class="container" style="max-width:420px">
+  <div class="card">
+    <h1>注册</h1>
+    <p class="sub">创建你的账号</p>
+    <div class="error" id="err"></div>
+    <div class="form-group">
+      <label>用户名</label>
+      <input id="username" type="text" placeholder="2-20 字" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input id="password" type="password" placeholder="至少 6 位" autocomplete="new-password">
+    </div>
+    <div class="cf-turnstile" data-sitekey="0x4AAAAAAAf199dRmjVqNCi40" data-theme="light" style="margin-bottom:16px"></div>
+    <button class="btn" id="submitBtn" onclick="doRegister()">注册</button>
+    <div class="center">已有账号？<a class="link" href="/login.html">去登录</a></div>
+  </div>
+</div>
+<script>
+async function doRegister() {
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('err');
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  err.textContent = '';
+
+  const tsToken = document.querySelector('[name="cf-turnstile-response"]')?.value || '';
+  if (!tsToken) { err.textContent = '请先完成人机验证'; return; }
+  if (username.length < 2) { err.textContent = '用户名至少 2 字'; return; }
+  if (password.length < 6) { err.textContent = '密码至少 6 位'; return; }
+
+  btn.disabled = true; btn.textContent = '注册中...';
+  try {
+    const r = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, turnstile: tsToken })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      alert('注册成功，请登录');
+      location.href = '/login.html';
+    } else {
+      err.textContent = d.error || '注册失败';
+      if (window.turnstile) turnstile.reset();
+    }
+  } catch (e) {
+    err.textContent = '网络错误';
+  } finally {
+    btn.disabled = false; btn.textContent = '注册';
+  }
+}
+</script>
+</body>
+</html>
