@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>管理后台 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=135">
+<link rel="stylesheet" href="/style.css?v=136">
 <script>
 (function(){
   var t = localStorage.getItem('forum-theme') || 'light';
@@ -55,6 +55,7 @@
   .admin-action-btn:hover { background: rgba(229,72,77,0.1); border-color: #e5484d; }
   .admin-action-btn.ban { color: #f59e0b; }
   .admin-action-btn.ban:hover { background: rgba(245,158,11,0.1); border-color: #f59e0b; }
+textarea { resize: none !important; }
 </style>
 </head>
 <body>
@@ -143,18 +144,61 @@ async function loadTab(type) {
     box.innerHTML = '加载中...';
     try {
       const r = await fetch('https://loufung.cn/api/config');
-      const config = await r.json();
+      const cfg = await r.json();
+      
+      const cardsHtml = (cfg.cards || []).map((c, i) => `
+        <div style="border:1px solid var(--card-border); padding:12px; border-radius:8px; margin-bottom:12px; background:var(--bg-body);">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            
+            <label style="font-size:12px; display:flex; align-items:center; gap:4px; margin-right: 10px;">
+              <input type="checkbox" class="c-visible" ${c.visible !== false ? 'checked' : ''}> 显示
+            </label>
+            <strong style="font-size:13px;">卡片 ${i+1}</strong>
+            <button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:#e5484d;cursor:pointer;font-size:12px;">删除</button>
+          </div>
+          <input type="text" class="c-cat" value="${esc(c.category||'')}" placeholder="分类 (如: AI · 桌宠)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg); color:var(--text-primary);">
+          <input type="text" class="c-name" value="${esc(c.name||'')}" placeholder="标题 (如: 小c)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg); color:var(--text-primary);">
+          <input type="text" class="c-desc" value="${esc(c.desc||'')}" placeholder="描述" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg); color:var(--text-primary);">
+          <input type="text" class="c-link" value="${esc(c.link||'')}" placeholder="跳转链接 (如: https://...)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg); color:var(--text-primary);">
+          <input type="text" class="c-byline" value="${esc(c.byline||'')}" placeholder="附加提示 (可留空，如: 💡 由 xx 建议)" style="width:100%; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg); color:var(--text-primary);">
+        </div>
+      `).join('');
+
+      const statsHtml = (cfg.stats || []).map((s, i) => `
+        <div style="display:flex; gap:8px; margin-bottom:8px;" class="stat-row">
+          <input type="text" class="s-num" value="${esc(s.num||'')}" placeholder="数字 (如: 3)" style="flex:1; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--bg-body); color:var(--text-primary);">
+          <input type="text" class="s-label" value="${esc(s.label||'')}" placeholder="标签 (如: 作品)" style="flex:1; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--bg-body); color:var(--text-primary);">
+        </div>
+      `).join('');
+
+      
+      
+
       box.innerHTML = `
         <div style="padding: 10px 0;">
+          <div class="form-group" style="margin-bottom:16px; background:rgba(77,107,254,0.05); padding:12px; border-radius:8px;">
+            <label style="display:flex; align-items:center; gap:8px; font-weight:bold;">
+              <input type="checkbox" id="cfgPublic" ${cfg.publicEnabled !== false ? 'checked' : ''} style="width:18px;height:18px;"> 
+              开启对外访问 (关闭后仅限局域网)
+            </label>
+          </div>
           <div class="form-group">
-            <label>问候语 (Greeting)</label>
-            <input id="cfgGreeting" type="text" value="${esc(config.greeting || '')}" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">
+            <label>关于 (支持直接回车换行，支持 **加粗**)</label>
+            <textarea id="cfgAbout" rows="2" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">${esc(cfg.about || '')}</textarea>
+          </div>
+          
+            <button class="btn small ghost" onclick="addStat()" style="margin-top:8px;">+ 添加统计</button>
           </div>
           <div class="form-group" style="margin-top:16px;">
             <label>公告 (Notice)</label>
-            <input id="cfgNotice" type="text" value="${esc(config.notice || '')}" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">
+            <textarea id="cfgNotice" rows="2" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">${esc(cfg.notice || '')}</textarea>
           </div>
-          <button class="btn" style="margin-top:20px;" onclick="saveSiteConfig()">保存修改</button>
+          <div class="form-group" style="margin-top:20px;">
+            <label>项目卡片列表</label>
+            <div id="cardsContainer">${cardsHtml}</div>
+            <button class="btn small ghost" onclick="addCard()" style="margin-top:8px;">+ 添加卡片</button>
+          </div>
+          <button class="btn" style="margin-top:24px;" onclick="saveSiteConfig()">保存并同步到主站</button>
         </div>
       `;
     } catch (e) {
@@ -240,27 +284,78 @@ async function doBanUser(id, role) {
 }
 
 
+
+function addStat() {
+  const div = document.createElement('div');
+  div.className = 'stat-row';
+  div.style.cssText = 'display:flex; gap:8px; margin-bottom:8px;';
+  div.innerHTML = `<input type="text" class="s-num" placeholder="数字" style="flex:1; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--bg-body);"><input type="text" class="s-label" placeholder="标签" style="flex:1; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--bg-body);">`;
+  document.getElementById('statsContainer').appendChild(div);
+}
+
+function addCard() {
+  const container = document.getElementById('cardsContainer');
+  const div = document.createElement('div');
+  div.style.cssText = 'border:1px solid var(--card-border); padding:12px; border-radius:8px; margin-bottom:12px; background:var(--bg-body);';
+  div.innerHTML = `
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+      
+      <label style="font-size:12px; display:flex; align-items:center; gap:4px; margin-right: 10px;">
+        <input type="checkbox" class="c-visible" checked> 显示
+      </label>
+      <strong style="font-size:13px;">新卡片</strong>
+      <button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:#e5484d;cursor:pointer;font-size:12px;">删除</button>
+    </div>
+    <input type="text" class="c-cat" placeholder="分类" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg);">
+    <input type="text" class="c-name" placeholder="标题" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg);">
+    <input type="text" class="c-desc" placeholder="描述" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg);">
+    <input type="text" class="c-link" placeholder="链接" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg);">
+    <input type="text" class="c-byline" placeholder="附加提示 (可留空)" style="width:100%; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg);">
+  `;
+  container.appendChild(div);
+}
+
 async function saveSiteConfig() {
-  const greeting = document.getElementById('cfgGreeting').value;
-  const notice = document.getElementById('cfgNotice').value;
-  
+  const btn = event.target;
+  const oldText = btn.textContent;
+  btn.disabled = true; btn.textContent = '保存中...';
+
+  const cards = Array.from(document.querySelectorAll('#cardsContainer > div')).map(div => ({
+    visible: div.querySelector('.c-visible').checked,
+    category: div.querySelector('.c-cat').value,
+    name: div.querySelector('.c-name').value,
+    desc: div.querySelector('.c-desc').value,
+    link: div.querySelector('.c-link').value,
+    byline: div.querySelector('.c-byline').value
+  }));
+
+  const aboutText = document.getElementById('cfgAbout').value.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+  const noticeText = document.getElementById('cfgNotice').value.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+
+  const payload = {
+    publicEnabled: document.getElementById('cfgPublic').checked,
+    about: aboutText,
+    notice: noticeText,
+    cards: cards
+  };
+
   try {
-    const r = await fetch('https://loufung.cn/api/config', {
+    const r = await fetch('https://loufung.cn/api/admin/config', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer loufung-admin-secret'
       },
-      body: JSON.stringify({ greeting, notice })
+      body: JSON.stringify(payload)
     });
-    const d = await r.json();
-    if (d.ok) {
-      alert('主站配置已更新！');
-    } else {
-      alert(d.error || '更新失败');
-    }
+    if (!r.ok) throw new Error('HTTP状态码 ' + r.status);
+    const text = await r.text();
+    if (text === 'OK' || text.includes('success')) alert('✅ 主站配置已同步更新！');
+    else alert('更新失败: ' + text);
   } catch (e) {
-    alert('网络错误: ' + e.message);
+    alert('网络请求失败: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = oldText;
   }
 }
 
