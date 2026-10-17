@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta name="view-transition" content="same-origin" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>搜索用户 · LouFung 论坛</title>
+<link rel="stylesheet" href="/style.css?v=134">
+<script>
+(function(){
+  var t = localStorage.getItem('forum-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+</head>
+<body>
+<div class="container" style="padding-top: 100px;">
+  <form id="search-form" action="/search.html" method="GET" style="display: flex; gap: 10px; margin-bottom: 24px;">
+    <input type="text" name="q" placeholder="输入用户名或 UID 搜索..." style="flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); background: rgba(255,255,255,0.8); font-size: 14px; outline: none;">
+    <button type="submit" style="padding: 0 20px; border-radius: 12px; border: none; background: #4d6bfe; color: #fff; font-weight: 600; cursor: pointer;">搜索</button>
+  </form>
+  <div id="results"></div>
+</div>
+<div class="hero-orb"></div>
+<div class="hero-orb-2"></div>
+
+<header class="forum-header" style="position: fixed !important; top: 16px !important; left: 50% !important; transform: translateX(-50%) !important; width: calc(100% - 32px) !important; max-width: 880px !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; padding: 12px 24px !important; border-radius: 999px !important; background: rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; border: 1px solid rgba(255, 255, 255, 0.4) !important; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important; z-index: 1000 !important; box-sizing: border-box !important; margin: 0 !important;">
+  
+  <a href="/" class="logo" style="font-size: 15px !important; font-weight: 600 !important; color: #0a0a0a !important; text-decoration: none !important; text-shadow: 0 0 2px #fff, 0 0 6px #fff !important;">
+     Lou<span style="color: #4d6bfe !important;">Fung</span> 论坛
+  </a>
+
+  <!-- 只留这一个空 div，让 JS 自己往里塞搜索和头像 -->
+  <div id="nav-right" style="display: flex !important; align-items: center !important; gap: 12px !important;"></div>
+</header>
+
+<div class="container">
+  <div id="results" style="margin-top:20px;">
+    <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px 0;">输入用户名开始搜索</div>
+  </div>
+</div>
+
+<div class="global-nav">
+  <a href="/" class="">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    首页
+  </a>
+  <a href="/new.html" class="add-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    发帖
+  </a>
+  <a href="/my">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    我的
+  </a>
+</div>
+<script>
+let meUser = null;
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function avatarHTML(name) {
+  const colors = ['#4d6bfe','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return '<div class="avatar" style="background:' + colors[h % colors.length] + '">' + (name[0] || '?').toUpperCase() + '</div>';
+}
+
+async function init() {
+  const me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  meUser = me.user;
+}
+
+let searchTimeout = null;
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  const query = e.target.value.trim();
+  const box = document.getElementById('results');
+
+  if (!query) {
+    box.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px 0;">输入用户名开始搜索</div>';
+    return;
+  }
+
+  box.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px 0;">搜索中...</div>';
+
+  // 防抖 300ms，避免打字太快狂发请求
+  searchTimeout = setTimeout(async () => {
+    try {
+      const r = await fetch('/api/search/users?q=' + encodeURIComponent(query));
+      const d = await r.json();
+
+      if (!d.users || d.users.length === 0) {
+        box.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px 0;">没有找到用户 "' + esc(query) + '"</div>';
+        return;
+      }
+
+      box.innerHTML = d.users.map(u => `
+        <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;cursor:pointer;padding:16px;" onclick="location.href='/user.html?u=${encodeURIComponent(u.username)}'">
+          ${avatarHTML(u.username)}
+          <div>
+            <div style="font-weight:600;font-size:15px;color:var(--text-primary);">${esc(u.username)}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">UID: ${u.id}</div>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      box.innerHTML = '<div style="text-align:center;color:#e5484d;font-size:13px;padding:40px 0;">搜索失败，请重试</div>';
+    }
+  }, 300);
+});
+
+init();
+</script>
+
+<script>
+// 动态修复底栏的“我的”链接
+(async function() {
+  try {
+    const r = await fetch('/api/me');
+    const d = await r.json();
+    const myLink = document.querySelector('.global-nav a[href="/my"]');
+    if (myLink) {
+      if (d.user) {
+        myLink.href = '/user.html?u=' + encodeURIComponent(d.user.username);
+        myLink.classList.add('active'); // 如果在用户主页可以高亮
+      } else {
+        myLink.href = '/login.html';
+      }
+    }
+  } catch(e) {}
+})();
+</script>
+
+<script src="/animations.js"></script>
+
+<script>
+(function(){
+  var form = document.getElementById('search-form');
+  if (!form) return;
+  
+  // 结果容器
+  var resultContainer = document.getElementById('results');
+  
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var q = form.querySelector('input').value.trim();
+    if (!q) return;
+
+    // 更新地址栏参数
+    window.history.pushState({}, '', '/search.html?q=' + encodeURIComponent(q));
+
+    // 提示加载中
+    resultContainer.innerHTML = '<div style="text-align:center; padding:40px; color:#888;">正在搜索...</div>';
+
+    // 请求后端搜索接口
+    fetch('/api/search/users?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(res => {
+        var users = Array.isArray(res) ? res : (res.users || []);
+        
+        // 如果没结果
+        if (users.length === 0) {
+          resultContainer.innerHTML = '<div style="text-align:center; padding:40px; color:#888;">暂无该用户</div>';
+          return;
+        }
+        
+        // 渲染结果
+        var html = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:20px;">';
+        users.forEach(u => {
+          var initial = u.username ? u.username[0].toUpperCase() : '?';
+          html += '<a href="/user.html?name=' + encodeURIComponent(u.username) + '" style="display:flex; align-items:center; gap:12px; padding:16px; background:#fff; border-radius:12px; text-decoration:none; color:#0a0a0a; box-shadow:0 2px 8px rgba(0,0,0,0.02);">';
+          html += '<div style="width:40px; height:40px; border-radius:50%; background:#00b894; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold;">' + initial + '</div>';
+          html += '<div><div style="font-weight:600;">' + (u.username || '未知') + '</div><div style="font-size:12px; color:#888;">UID: ' + (u.id || '未知') + '</div></div>';
+          html += '</a>';
+        });
+        html += '</div>';
+        resultContainer.innerHTML = html;
+      })
+      .catch(err => {
+        resultContainer.innerHTML = '<div style="text-align:center; padding:40px; color:red;">搜索出错: ' + err.message + '</div>';
+      });
+  });
+
+  // 如果是从别的地方跳过来，URL 带了 ?q=xxx，自动搜索
+  var urlParams = new URLSearchParams(window.location.search);
+  var query = urlParams.get('q');
+  if (query) {
+    form.querySelector('input').value = query;
+    form.dispatchEvent(new Event('submit'));
+  }
+})();
+</script>
+
+<script id="glass-bottom-nav-script">
+document.addEventListener("DOMContentLoaded", function() {
+    const addBtn = document.querySelector('a[href="/new.html"].add-btn');
+    if(addBtn && addBtn.parentElement) {
+        const nav = addBtn.parentElement;
+        const glassStyle = "position: fixed !important; bottom: 16px !important; left: 50% !important; transform: translateX(-50%) !important; width: calc(100% - 32px) !important; max-width: 880px !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-around !important; padding: 12px 24px !important; border-radius: 999px !important; background: rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; border: 1px solid rgba(255, 255, 255, 0.4) !important; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important; z-index: 1000 !important; box-sizing: border-box !important; margin: 0 !important; background-color: rgba(255, 255, 255, 0.15) !important;";
+        nav.style.cssText += glassStyle;
+        document.body.style.paddingBottom = "100px"; // 留出底部空间防止内容被遮挡
+    }
+});
+</script>
+
+</body>
+</html>

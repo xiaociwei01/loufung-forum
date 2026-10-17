@@ -1,16 +1,24 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+<meta name="view-transition" content="same-origin" />
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>帖子 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=121">
+<link rel="stylesheet" href="/style.css?v=134">
 <script>
 (function(){
   var t = localStorage.getItem('forum-theme') || 'light';
   document.documentElement.setAttribute('data-theme', t);
 })();
 </script>
+
+<style>
+  /* 在详情页，评论栏可以放低一点，因为没有全局底栏了 */
+  .bottom-bar { bottom: calc(14px + env(safe-area-inset-bottom)) !important; width: calc(100% - 32px) !important; left: 50% !important; transform: translateX(-50%) !important; }
+  body { padding-bottom: 100px !important; } /* 底部留白小一点 */
+</style>
+
 </head>
 <body>
 <div id="jserr" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#e5484d;color:#fff;padding:8px;font-size:12px;word-break:break-all"></div>
@@ -19,17 +27,22 @@
 <div class="hero-orb"></div>
 <div class="hero-orb-2"></div>
 
-<nav class="nav">
-  <a href="/" class="brand">LouFung 论坛</a>
-  <span id="nav-right"></span>
-</nav>
+<header class="forum-header" style="position: fixed !important; top: 16px !important; left: 50% !important; transform: translateX(-50%) !important; width: calc(100% - 32px) !important; max-width: 880px !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; padding: 12px 24px !important; border-radius: 999px !important; background: rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; border: 1px solid rgba(255, 255, 255, 0.4) !important; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important; z-index: 1000 !important; box-sizing: border-box !important; margin: 0 !important;">
+  
+  <a href="/" class="logo" style="font-size: 15px !important; font-weight: 600 !important; color: #0a0a0a !important; text-decoration: none !important; text-shadow: 0 0 2px #fff, 0 0 6px #fff !important;">
+     Lou<span style="color: #4d6bfe !important;">Fung</span> 论坛
+  </a>
+
+  <!-- 只留这一个空 div，让 JS 自己往里塞搜索和头像 -->
+  <div id="nav-right" style="display: flex !important; align-items: center !important; gap: 12px !important;"></div>
+</header>
 
 <div class="container">
   <div class="card" style="margin-bottom:20px">
     <div class="post-head">
       <div class="author-row" id="authorRow" style="display:none">
         <div class="avatar" id="postAvatar"></div>
-        <span class="author-name" id="postAuthor"></span>
+        <a class="author-name" id="postAuthor" href="#" style="text-decoration:none;color:var(--text-primary)"></a>
         <span class="author-time" id="postTime"></span>
       </div>
       <div style="display:flex;align-items:flex-start;gap:10px">
@@ -99,6 +112,7 @@ async function loadPost() {
     document.getElementById('title').textContent = d.post.title;
     document.getElementById('postAvatar').outerHTML = avatarHTML(d.post.username).replace('class="avatar"', 'class="avatar" id="postAvatar"');
     document.getElementById('postAuthor').textContent = d.post.username;
+    document.getElementById('postAuthor').href = '/user.html?u=' + encodeURIComponent(d.post.username);
     document.getElementById('postTime').textContent = d.post.created_at;
     document.getElementById('authorRow').style.display = 'flex';
     document.getElementById('content').textContent = d.post.content;
@@ -116,16 +130,17 @@ function renderComments(list) {
     return;
   }
   box.innerHTML = list.map(c => renderOne(c, 0)).join('');
+  if (window.initReveal) window.initReveal();
 }
 
 function renderOne(c, depth) {
   const nested = depth > 0 ? 'nested' : '';
   const likedCls = c.liked_by_me ? ' liked' : '';
-  let html = '<div class="cmt ' + nested + '">' +
+  let html = '<div class="cmt reveal ' + nested + '">' +
     avatarHTML(c.username) +
     '<div class="cmt-body">' +
       '<div class="cmt-head">' +
-        '<span class="author-name">' + esc(c.username) + '</span>' + (meUser && meUser.username === c.username ? '<span class="me-badge">我</span>' : '') +
+        '<a class="author-name" style="text-decoration:none;color:var(--text-primary)" href="/user.html?u=' + encodeURIComponent(c.username) + '">' + esc(c.username) + '</a>' + (meUser && meUser.username === c.username ? '<span class="me-badge">我</span>' : '') +
       '</div>' +
       '<div class="cmt-content">' + esc(c.content) + '</div>' +
       '<div class="cmt-foot">' +
@@ -215,10 +230,15 @@ async function init() {
   me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
   meUser = me.user;
   const nav = document.getElementById('nav-right');
+  const searchBtn = '<a href="/search.html" class="nav-icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></a>';
   if (me.user) {
-    nav.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">' + esc(me.user.username) + '</span> <a href="#" onclick="logout();return false" style="margin-left:12px">退出</a>';
+    let h = 0;
+  for (let i = 0; i < me.user.username.length; i++) h = (h * 31 + me.user.username.charCodeAt(i)) >>> 0;
+  const colors = ['#4d6bfe','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+  const navBg = colors[h % colors.length];
+  nav.innerHTML = searchBtn + '<a href="/user.html?u=' + encodeURIComponent(me.user.username) + '" class="nav-avatar" style="text-decoration:none;background:' + navBg + '">' + esc(me.user.username[0]).toUpperCase() + '</a>';
   } else {
-    nav.innerHTML = '<a href="/login.html">登录</a>';
+    nav.innerHTML = searchBtn + '<a href="/login.html" style="font-size:14px;color:var(--accent);text-decoration:none;font-weight:500;margin-left:4px;">登录</a>';
   }
   await loadPost();
 }
@@ -348,5 +368,7 @@ init().catch(e => {
   console.error(e);
 });
 </script>
+
+<script src="/animations.js"></script>
 </body>
 </html>

@@ -165,12 +165,33 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
 
   try {
+    if (p === '/api/admin/stats' && req.method === 'GET') return handleAdminStats(req, res);
+    if (p === '/api/admin/users' && req.method === 'GET') return handleAdminUsers(req, res);
+    if (p === '/api/admin/posts' && req.method === 'GET') return handleAdminPosts(req, res);
+    if (p === '/api/admin/comments' && req.method === 'GET') return handleAdminComments(req, res);
+    
+    const mAdminDelPost = p.match(/^\/api\/admin\/posts\/(\d+)$/);
+    if (mAdminDelPost && req.method === 'DELETE') return handleAdminDelPost(req, res, Number(mAdminDelPost[1]));
+    
+    const mAdminDelComment = p.match(/^\/api\/admin\/comments\/(\d+)$/);
+    if (mAdminDelComment && req.method === 'DELETE') return handleAdminDelComment(req, res, Number(mAdminDelComment[1]));
+    
+    const mAdminBanUser = p.match(/^\/api\/admin\/users\/(\d+)\/ban$/);
+    if (mAdminBanUser && req.method === 'POST') return handleAdminBanUser(req, res, Number(mAdminBanUser[1]));
+
+    if (p === '/my') return handleMyProfile(req, res);
     if (!p.startsWith('/api/')) {
       return serveStatic(req, res, p);
     }
     const mPost = p.match(/^\/api\/posts\/(\d+)$/);
     if (p === '/api/posts' && req.method === 'GET') return handleListPosts(req, res);
     if (p === '/api/comments' && req.method === 'POST') return handleCreateComment(req, res);
+    if (p === '/my') return handleMyProfile(req, res);
+    if (p === '/api/search/users' && req.method === 'GET') {
+      return handleSearchUsers(req, res, url.searchParams.get('q') || '');
+    }
+    const mUser = p.match(/^\/api\/users\/([^\/]+)$/);
+    if (mUser && req.method === 'GET') return handleGetUser(req, res, decodeURIComponent(mUser[1]));
     const mPostDel = p.match(/^\/api\/posts\/(\d+)$/);
     if (mPostDel && req.method === 'DELETE') return handleDeletePost(req, res, Number(mPostDel[1]));
     const mCmtDel = p.match(/^\/api\/comments\/(\d+)$/);
@@ -381,6 +402,115 @@ function handleDeleteComment(req, res, id) {
   const placeholders = ids.map(() => '?').join(',');
   db.prepare('DELETE FROM comments WHERE id IN (' + placeholders + ')').run(...ids);
   sendJSON(res, 200, { ok: true, deleted: ids.length });
+}
+
+
+function handleGetUser(req, res, username) {
+  const user = db.prepare('SELECT id, username, created_at FROM users WHERE username = ?').get(username);
+  if (!user) return sendJSON(res, 404, { error: '用户不存在' });
+
+  const me = getSession(req);
+  const meId = me ? me.id : -1;
+
+  const posts = db.prepare(
+    "SELECT p.id, p.title, p.content, strftime('%Y-%m-%d %H:%M', p.created_at, '+8 hours') as created_at, (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id) as like_count, (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = ?) as liked_by_me, (SELECT COUNT(*) FROM post_favorites pf WHERE pf.post_id = p.id) as fav_count, (SELECT COUNT(*) FROM post_shares ps WHERE ps.post_id = p.id) as share_count, (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 'approved') as comment_count FROM posts p WHERE p.user_id = ? AND p.status = 'approved' ORDER BY p.id DESC LIMIT 100"
+  ).all(meId, user.id);
+
+  // 查一下总发帖数
+  const total = db.prepare('SELECT COUNT(*) as c FROM posts WHERE user_id = ? AND status = ?').get(user.id, 'approved').c;
+
+  sendJSON(res, 200, { user, posts, total });
+}
+
+
+function handleMyProfile(req, res) {
+  const user = getSession(req);
+  if (!user) {
+    res.writeHead(302, { 'Location': '/login.html' });
+    return res.end();
+  }
+  res.writeHead(302, { 'Location': '/user.html?u=' + encodeURIComponent(user.username) });
+  res.end();
+}
+
+
+function handleSearchUsers(req, res, query) {
+  if (!query || query.trim() === '') {
+    return sendJSON(res, 200, { users: [] });
+  }
+  const q = '%' + query.trim() + '%';
+  const isNum = /^\d+$/.test(query.trim());
+  
+  let sql = 'SELECT id, username, created_at FROM users WHERE username LIKE ?';
+  const params = [q];
+  
+  if (isNum) {
+    sql = 'SELECT id, username, created_at FROM users WHERE username LIKE ? OR id = ?';
+    params.push(Number(query.trim()));
+  }
+  
+  sql += ' ORDER BY id ASC LIMIT 30';
+  const users = db.prepare(sql).all(...params);
+  sendJSON(res, 200, { users });
+}
+
+
+// ===== 管理后台接口 =====
+function requireAdmin(req, res) {
+  const user = getSession(req);
+  if (!user) { sendJSON(res, 401, { error: '请先登录' }); return null; }
+  const dbUser = db.prepare('SELECT role FROM users WHERE id = ?').get(user.id);
+  if (!dbUser || dbUser.role !== 'admin') { sendJSON(res, 403, { error: '无管理员权限' }); return null; }
+  return user;
+}
+
+function handleAdminStats(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+  const postCount = db.prepare('SELECT COUNT(*) as c FROM posts').get().c;
+  const commentCount = db.prepare('SELECT COUNT(*) as c FROM comments').get().c;
+  sendJSON(res, 200, { userCount, postCount, commentCount });
+}
+
+function handleAdminUsers(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const users = db.prepare("SELECT id, username, role, strftime('%Y-%m-%d %H:%M', created_at, '+8 hours') as created_at FROM users ORDER BY id DESC").all();
+  sendJSON(res, 200, { users });
+}
+
+function handleAdminPosts(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const posts = db.prepare("SELECT p.id, p.title, p.status, strftime('%Y-%m-%d %H:%M', p.created_at, '+8 hours') as created_at, u.username FROM posts p JOIN users u ON u.id = p.user_id ORDER BY p.id DESC").all();
+  sendJSON(res, 200, { posts });
+}
+
+function handleAdminComments(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const comments = db.prepare("SELECT c.id, c.content, c.status, strftime('%Y-%m-%d %H:%M', c.created_at, '+8 hours') as created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id ORDER BY c.id DESC").all();
+  sendJSON(res, 200, { comments });
+}
+
+function handleAdminDelPost(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  db.prepare('DELETE FROM posts WHERE id = ?').run(id);
+  sendJSON(res, 200, { ok: true });
+}
+
+function handleAdminDelComment(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  db.prepare('DELETE FROM comments WHERE id = ?').run(id);
+  sendJSON(res, 200, { ok: true });
+}
+
+function handleAdminBanUser(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  const user = db.prepare('SELECT username, role FROM users WHERE id = ?').get(id);
+  if (!user) return sendJSON(res, 404, { error: '用户不存在' });
+  if (user.role === 'admin') return sendJSON(res, 400, { error: '不能封禁管理员' });
+  
+  const newRole = user.role === 'banned' ? 'user' : 'banned';
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(newRole, id);
+  sendJSON(res, 200, { ok: true, role: newRole });
 }
 
 server.listen(PORT, () => {

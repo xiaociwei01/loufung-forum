@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta name="view-transition" content="same-origin" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>管理后台 · LouFung 论坛</title>
+<link rel="stylesheet" href="/style.css?v=135">
+<script>
+(function(){
+  var t = localStorage.getItem('forum-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<style>
+  .admin-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .admin-tab {
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .admin-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .admin-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .admin-list-item:last-child { border-bottom: none; }
+  .admin-list-info { flex: 1; min-width: 0; }
+  .admin-list-title { font-weight: 600; font-size: 14px; color: var(--text-primary); margin-bottom: 4px; }
+  .admin-list-meta { font-size: 12px; color: var(--text-muted); }
+  .admin-action-btn {
+    font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--card-border); background: transparent; color: #e5484d;
+    transition: all 0.2s;
+  }
+  .admin-action-btn:hover { background: rgba(229,72,77,0.1); border-color: #e5484d; }
+  .admin-action-btn.ban { color: #f59e0b; }
+  .admin-action-btn.ban:hover { background: rgba(245,158,11,0.1); border-color: #f59e0b; }
+</style>
+</head>
+<body>
+<div class="hero-orb"></div>
+<div class="hero-orb-2"></div>
+
+<header class="forum-header" style="position: fixed !important; top: 16px !important; left: 50% !important; transform: translateX(-50%) !important; width: calc(100% - 32px) !important; max-width: 880px !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; padding: 12px 24px !important; border-radius: 999px !important; background: rgba(255, 255, 255, 0.15) !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; border: 1px solid rgba(255, 255, 255, 0.4) !important; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important; z-index: 1000 !important; box-sizing: border-box !important; margin: 0 !important;">
+  
+  <a href="/" class="logo" style="font-size: 15px !important; font-weight: 600 !important; color: #0a0a0a !important; text-decoration: none !important; text-shadow: 0 0 2px #fff, 0 0 6px #fff !important;">
+     Lou<span style="color: #4d6bfe !important;">Fung</span> 论坛
+  </a>
+
+  <!-- 只留这一个空 div，让 JS 自己往里塞搜索和头像 -->
+  <div id="nav-right" style="display: flex !important; align-items: center !important; gap: 12px !important;"></div>
+</header>
+
+<div class="container">
+  <div id="statsBar" class="card" style="display:flex;justify-content:space-around;text-align:center;margin-bottom:24px;padding:16px;">
+    <div><div style="font-size:20px;font-weight:bold;" id="statUsers">-</div><div class="admin-list-meta">用户</div></div>
+    <div><div style="font-size:20px;font-weight:bold;" id="statPosts">-</div><div class="admin-list-meta">帖子</div></div>
+    <div><div style="font-size:20px;font-weight:bold;" id="statComments">-</div><div class="admin-list-meta">评论</div></div>
+  </div>
+
+  <div class="admin-tabs">
+    <div class="admin-tab active" onclick="switchTab('users', this)">用户管理</div>
+    <div class="admin-tab" onclick="switchTab('posts', this)">帖子管理</div>
+    <div class="admin-tab" onclick="switchTab('comments', this)">评论管理</div>
+    <div class="admin-tab" onclick="switchTab('site', this)">主站控制</div>
+  </div>
+
+  <div class="card" style="padding:20px;">
+    <div id="adminList">
+      <div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>
+    </div>
+  </div>
+</div>
+<script>
+let meUser = null;
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function init() {
+  // 1. 检查权限
+  const me = await fetch('/api/me').then(r => r.json()).catch(() => ({ user: null }));
+  if (!me.user) { location.href = '/login.html'; return; }
+  
+  // 判断是否 admin (后端会拦截请求，但我们也可以在前端先预判)
+  // 这里我们直接尝试获取 stats，如果 403 就跳走
+  const res = await fetch('/api/admin/stats');
+  if (res.status === 403) {
+    alert('无管理员权限');
+    location.href = '/';
+    return;
+  }
+  const stats = await res.json();
+  
+  // 2. 渲染顶栏
+  const nav = document.getElementById('nav-right');
+  nav.innerHTML = '<a href="/" style="font-size:14px;color:var(--accent);text-decoration:none;">返回首页</a>';
+
+  // 3. 填充数据
+  document.getElementById('statUsers').textContent = stats.userCount;
+  document.getElementById('statPosts').textContent = stats.postCount;
+  document.getElementById('statComments').textContent = stats.commentCount;
+  
+  // 默认加载用户列表
+  loadTab('users');
+}
+
+function switchTab(type, el) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  loadTab(type);
+}
+
+let currentTab = 'users';
+
+async function loadTab(type) {
+  currentTab = type;
+  const box = document.getElementById('adminList');
+  box.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>';
+  
+  if (type === 'site') {
+    box.innerHTML = '加载中...';
+    try {
+      const r = await fetch('https://loufung.cn/api/config');
+      const config = await r.json();
+      box.innerHTML = `
+        <div style="padding: 10px 0;">
+          <div class="form-group">
+            <label>问候语 (Greeting)</label>
+            <input id="cfgGreeting" type="text" value="${esc(config.greeting || '')}" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">
+          </div>
+          <div class="form-group" style="margin-top:16px;">
+            <label>公告 (Notice)</label>
+            <input id="cfgNotice" type="text" value="${esc(config.notice || '')}" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">
+          </div>
+          <button class="btn" style="margin-top:20px;" onclick="saveSiteConfig()">保存修改</button>
+        </div>
+      `;
+    } catch (e) {
+      box.innerHTML = '<div style="text-align:center;color:#e5484d;padding:20px;">读取失败: ' + e.message + '</div>';
+    }
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/admin/' + type);
+    if (!r.ok) throw new Error('权限不足或网络错误');
+    const d = await r.json();
+    
+    if (type === 'users') {
+      box.innerHTML = d.users.map(u => `
+        <div class="admin-list-item">
+          <div class="admin-list-info">
+            <div class="admin-list-title">${esc(u.username)} ${u.role === 'admin' ? '<span style="font-size:10px;color:#4d6bfe;background:rgba(77,107,254,0.1);padding:2px 6px;border-radius:4px;">管理员</span>' : ''} ${u.role === 'banned' ? '<span style="font-size:10px;color:#e5484d;background:rgba(229,72,77,0.1);padding:2px 6px;border-radius:4px;">已封禁</span>' : ''}</div>
+            <div class="admin-list-meta">UID: ${u.id} · 注册于 ${u.created_at}</div>
+          </div>
+          ${u.role === 'admin' ? '' : `<button class="admin-action-btn ban" onclick="doBanUser(${u.id}, '${u.role}')">${u.role === 'banned' ? '解封' : '封禁'}</button>`}
+        </div>
+      `).join('') || '<div style="text-align:center;color:var(--text-muted);padding:20px;">没有用户</div>';
+      
+    } else if (type === 'posts') {
+      box.innerHTML = d.posts.map(p => `
+        <div class="admin-list-item">
+          <div class="admin-list-info">
+            <div class="admin-list-title">${esc(p.title)}</div>
+            <div class="admin-list-meta">${esc(p.username)} · ${p.created_at}</div>
+          </div>
+          <button class="admin-action-btn" onclick="doDeletePost(${p.id})">删除</button>
+        </div>
+      `).join('') || '<div style="text-align:center;color:var(--text-muted);padding:20px;">没有帖子</div>';
+      
+    } else if (type === 'comments') {
+      box.innerHTML = d.comments.map(c => `
+        <div class="admin-list-item">
+          <div class="admin-list-info">
+            <div class="admin-list-title" style="font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.content)}</div>
+            <div class="admin-list-meta">${esc(c.username)} · ${c.created_at}</div>
+          </div>
+          <button class="admin-action-btn" onclick="doDeleteComment(${c.id})">删除</button>
+        </div>
+      `).join('') || '<div style="text-align:center;color:var(--text-muted);padding:20px;">没有评论</div>';
+    }
+  } catch (e) {
+    box.innerHTML = '<div style="text-align:center;color:#e5484d;padding:20px;">' + e.message + '</div>';
+  }
+}
+
+async function updateStats() {
+  const res = await fetch('/api/admin/stats');
+  if (res.ok) {
+    const stats = await res.json();
+    document.getElementById('statUsers').textContent = stats.userCount;
+    document.getElementById('statPosts').textContent = stats.postCount;
+    document.getElementById('statComments').textContent = stats.commentCount;
+  }
+}
+
+async function doDeletePost(id) {
+  if (!confirm('确定删除这篇帖子及其所有评论？')) return;
+  const r = await fetch('/api/admin/posts/' + id, { method: 'DELETE' });
+  if (r.ok) { loadTab('posts'); updateStats(); }
+  else { alert('删除失败'); }
+}
+
+async function doDeleteComment(id) {
+  if (!confirm('确定删除这条评论？')) return;
+  const r = await fetch('/api/admin/comments/' + id, { method: 'DELETE' });
+  if (r.ok) { loadTab('comments'); updateStats(); }
+  else { alert('删除失败'); }
+}
+
+async function doBanUser(id, role) {
+  const isBanned = role === 'banned';
+  if (!confirm(isBanned ? '确定解封该用户？' : '确定封禁该用户？')) return;
+  const r = await fetch('/api/admin/users/' + id + '/ban', { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) { loadTab('users'); } 
+  else { alert(d.error || '操作失败'); }
+}
+
+
+async function saveSiteConfig() {
+  const greeting = document.getElementById('cfgGreeting').value;
+  const notice = document.getElementById('cfgNotice').value;
+  
+  try {
+    const r = await fetch('https://loufung.cn/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer loufung-admin-secret'
+      },
+      body: JSON.stringify({ greeting, notice })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      alert('主站配置已更新！');
+    } else {
+      alert(d.error || '更新失败');
+    }
+  } catch (e) {
+    alert('网络错误: ' + e.message);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
