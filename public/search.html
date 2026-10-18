@@ -172,7 +172,7 @@ init();
         var html = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:20px;">';
         users.forEach(u => {
           var initial = u.username ? u.username[0].toUpperCase() : '?';
-          html += '<a href="/user.html?name=' + encodeURIComponent(u.username) + '" style="display:flex; align-items:center; gap:12px; padding:16px; background:#fff; border-radius:12px; text-decoration:none; color:#0a0a0a; box-shadow:0 2px 8px rgba(0,0,0,0.02);">';
+          html += '<a href="/user.html?u=' + encodeURIComponent(u.username) + '" style="display:flex; align-items:center; gap:12px; padding:16px; background:#fff; border-radius:12px; text-decoration:none; color:#0a0a0a; box-shadow:0 2px 8px rgba(0,0,0,0.02);">';
           html += '<div style="width:40px; height:40px; border-radius:50%; background:#00b894; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold;">' + initial + '</div>';
           html += '<div><div style="font-weight:600;">' + (u.username || '未知') + '</div><div style="font-size:12px; color:#888;">UID: ' + (u.id || '未知') + '</div></div>';
           html += '</a>';
