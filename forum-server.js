@@ -179,6 +179,8 @@ const server = http.createServer(async (req, res) => {
     const mAdminBanUser = p.match(/^\/api\/admin\/users\/(\d+)\/ban$/);
     if (mAdminBanUser && req.method === 'POST') return handleAdminBanUser(req, res, Number(mAdminBanUser[1]));
 
+    if (p === '/api/admin/ciwei-config' && req.method === 'GET') return handleGetCiweiConfig(req, res);
+    if (p === '/api/admin/ciwei-config' && req.method === 'POST') return handleSaveCiweiConfig(req, res);
     if (p === '/my') return handleMyProfile(req, res);
     if (!p.startsWith('/api/')) {
       return serveStatic(req, res, p);
@@ -511,6 +513,27 @@ function handleAdminBanUser(req, res, id) {
   const newRole = user.role === 'banned' ? 'user' : 'banned';
   db.prepare('UPDATE users SET role = ? WHERE id = ?').run(newRole, id);
   sendJSON(res, 200, { ok: true, role: newRole });
+}
+
+
+function handleGetCiweiConfig(req, res) {
+  const cfgPath = '/data/data/com.termux/files/home/ciwei-server/public/ai-config.json';
+  try {
+    if (!fs.existsSync(cfgPath)) return sendJSON(res, 200, {});
+    const data = fs.readFileSync(cfgPath, 'utf8');
+    sendJSON(res, 200, JSON.parse(data));
+  } catch(e) { sendJSON(res, 500, { error: '读取失败' }); }
+}
+
+function handleSaveCiweiConfig(req, res) {
+  const cfgPath = '/data/data/com.termux/files/home/ciwei-server/public/ai-config.json';
+  readBody(req).then(body => {
+    try {
+      const newCfg = JSON.parse(body);
+      fs.writeFileSync(cfgPath, JSON.stringify(newCfg, null, 2), 'utf8');
+      sendJSON(res, 200, { ok: true });
+    } catch(e) { sendJSON(res, 400, { error: '格式错误' }); }
+  });
 }
 
 server.listen(PORT, () => {

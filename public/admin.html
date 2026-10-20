@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>管理后台 · LouFung 论坛</title>
-<link rel="stylesheet" href="/style.css?v=136">
+<link rel="stylesheet" href="/style.css?v=1792460721">
 <script>
 (function(){
   var t = localStorage.getItem('forum-theme') || 'light';
@@ -83,7 +83,7 @@ textarea { resize: none !important; }
     <div class="admin-tab active" onclick="switchTab('users', this)">用户管理</div>
     <div class="admin-tab" onclick="switchTab('posts', this)">帖子管理</div>
     <div class="admin-tab" onclick="switchTab('comments', this)">评论管理</div>
-    <div class="admin-tab" onclick="switchTab('site', this)">主站控制</div>
+    <div class="admin-tab" onclick="switchTab('site', this)">主站控制</div><div class="admin-tab" onclick="switchTab('ai-config', this)">小c参数</div><div class="admin-tab" onclick="switchTab('ciwei', this)">小c控制</div>
   </div>
 
   <div class="card" style="padding:20px;">
@@ -140,6 +140,109 @@ async function loadTab(type) {
   const box = document.getElementById('adminList');
   box.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>';
   
+  if (type === 'ciwei') {
+    box.innerHTML = '加载中...';
+    fetch('https://c.loufung.cn/api/settings').then(r=>r.json()).then(cfg => {
+      const model = cfg.model || 'deepseek-v4-flash';
+      const temp = cfg.temperature || '0.7';
+      let html = '<div class="form-group"><label>模型</label><select id="ciweiModel" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);">';
+      html += '<option value="deepseek-v4-flash" ' + (model === 'deepseek-v4-flash' ? 'selected' : '') + '>Flash (快速)</option>';
+      html += '<option value="deepseek-v4-pro" ' + (model === 'deepseek-v4-pro' ? 'selected' : '') + '>Pro (推理)</option></select></div>';
+      
+      html += '<div class="form-group"><label>温度 <span id="vTemp">' + temp + '</span></label>';
+      html += '<input type="range" id="ciweiTemp" min="0.1" max="1.5" step="0.1" value="' + temp + '" style="width:100%;" oninput="document.getElementById(\'vTemp\').innerText=this.value"></div>';
+      
+      html += '<div class="form-group"><label>提示词</label><textarea id="ciweiPrompt" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);">' + (cfg.system_prompt || '') + '</textarea></div>';
+      
+      html += '<div class="form-group"><label>快捷对话卡片</label><div id="dCardList"></div>';
+      html += '<button class="btn small ghost" style="width:100%;margin-top:10px;" onclick="addDCard()">+ 添加对话</button></div>';
+      html += '<button class="btn" style="margin-top:20px;" onclick="saveCiweiConfig()">保存并同步</button>';
+      
+      box.innerHTML = html;
+      
+      try {
+        const ds = JSON.parse(cfg.dialogues || '[]');
+        ds.forEach(d => {
+          const div = document.createElement('div');
+          div.className = 'd-row';
+          div.style.cssText = 'border:1px solid var(--card-border);padding:12px;margin-bottom:12px;border-radius:8px;background:var(--bg-body);';
+          div.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><strong>对话</strong><button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:red;">删除</button></div>' +
+            '<input type="text" class="d-icon" value="' + (d.icon||'') + '" placeholder="图标" style="width:100%;margin-bottom:6px;padding:8px;border:1px solid #ddd;border-radius:4px;">' +
+            '<input type="text" class="d-q" value="' + (d.q||'') + '" placeholder="问题" style="width:100%;margin-bottom:6px;padding:8px;border:1px solid #ddd;border-radius:4px;">' +
+            '<textarea class="d-a" placeholder="回答" rows="2" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">' + (d.a||'') + '</textarea>';
+          document.getElementById('dCardList').appendChild(div);
+        });
+      } catch(e) {}
+    });
+    return;
+  }
+
+  
+  if (type === 'ai-config') {
+    box.innerHTML = '加载中...';
+    fetch('/api/admin/ciwei-config').then(r => r.json()).then(cfg => {
+      // 容错处理
+      cfg = cfg || {};
+      const model = cfg.model || 'deepseek-v4-flash';
+      const temp = cfg.temperature || 0.7;
+      const maxTok = cfg.maxTokens || 1024;
+      const ctx = cfg.contextLines || 10;
+      const effort = cfg.reasoningEffort || 'high';
+      const stream = cfg.stream !== false;
+
+      box.innerHTML = `
+  <div class="form-group">
+    <label>DeepSeek API Key (必填)</label>
+    <input type="password" id="cApiKey" value="${cfg.apiKey || ''}" placeholder="sk-..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);margin-top:6px;">
+  </div>
+
+  <div class="form-group" style="margin-top:16px;">
+    <label>模型 (Model)</label>
+          <select id="cModel" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);">
+            <option value="deepseek-v4-flash" ${model === 'deepseek-v4-flash' ? 'selected' : ''}>Flash · 快速 (便宜)</option>
+            <option value="deepseek-v4-pro" ${model === 'deepseek-v4-pro' ? 'selected' : ''}>Pro · 推理 (更强)</option>
+          </select>
+        </div>
+        
+        <div class="form-group" style="margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;">
+            <label>温度 (Temperature)</label>
+            <span id="valTemp" style="font-weight:bold;">${temp}</span>
+          </div>
+          <input type="range" id="cTemp" min="0.1" max="1.5" step="0.1" value="${temp}" style="width:100%;margin-top:8px;accent-color:var(--accent);" oninput="document.getElementById('valTemp').innerText=this.value">
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;">
+            <label>最大输出 Tokens</label>
+            <span id="valMax" style="font-weight:bold;">${maxTok}</span>
+          </div>
+          <input type="range" id="cMax" min="256" max="4096" step="256" value="${maxTok}" style="width:100%;margin-top:8px;accent-color:var(--accent);" oninput="document.getElementById('valMax').innerText=this.value">
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <label>推理强度</label>
+          <select id="cEffort" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);">
+            <option value="low" ${effort === 'low' ? 'selected' : ''}>低</option>
+            <option value="high" ${effort === 'high' ? 'selected' : ''}>高</option>
+            <option value="max" ${effort === 'max' ? 'selected' : ''}>最大</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <label>流式输出 (打字机效果)</label>
+          <select id="cStream" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--card-border);background:var(--bg-body);color:var(--text-primary);">
+            <option value="true" ${stream ? 'selected' : ''}>开启</option>
+            <option value="false" ${!stream ? 'selected' : ''}>关闭</option>
+          </select>
+        </div>
+
+        <button class="btn" style="margin-top:24px;" onclick="saveAiConfig()">保存到服务器</button>
+      `;
+    }).catch(e => box.innerHTML = '读取失败');
+    return;
+  }
+
   if (type === 'site') {
     box.innerHTML = '加载中...';
     try {
@@ -313,6 +416,54 @@ function addCard() {
     <input type="text" class="c-byline" placeholder="附加提示 (可留空)" style="width:100%; padding:6px; border:1px solid var(--card-border); border-radius:4px; background:var(--card-bg);">
   `;
   container.appendChild(div);
+}
+
+async function saveCiweiConfig() {
+  const model = document.getElementById('ciweiModel').value;
+  const temperature = document.getElementById('ciweiTemp').value;
+  const system_prompt = document.getElementById('ciweiPrompt').value;
+  const ds = Array.from(document.querySelectorAll('.d-row')).map(r => ({
+    icon: r.querySelector('.d-icon').value,
+    q: r.querySelector('.d-q').value,
+    a: r.querySelector('.d-a').value
+  }));
+  await fetch('https://c.loufung.cn/api/settings', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ model, temperature, system_prompt, dialogues: JSON.stringify(ds) })
+  });
+  alert('✅ 小c配置已保存！');
+}
+
+function addDCard() {
+  const div = document.createElement('div');
+  div.className = 'd-row';
+  div.style.cssText = 'border:1px solid var(--card-border);padding:12px;margin-bottom:12px;border-radius:8px;background:var(--bg-body);';
+  div.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><strong>新对话</strong><button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:red;">删除</button></div>' +
+    '<input type="text" class="d-icon" placeholder="图标" style="width:100%;margin-bottom:6px;padding:8px;border:1px solid #ddd;border-radius:4px;">' +
+    '<input type="text" class="d-q" placeholder="问题" style="width:100%;margin-bottom:6px;padding:8px;border:1px solid #ddd;border-radius:4px;">' +
+    '<textarea class="d-a" placeholder="回答" rows="2" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;"></textarea>';
+  document.getElementById('dCardList').appendChild(div);
+}
+
+
+async function saveAiConfig() {
+  const model = document.getElementById('cModel').value;
+  const temperature = parseFloat(document.getElementById('cTemp').value);
+  const maxTokens = parseInt(document.getElementById('cMax').value);
+  const reasoningEffort = document.getElementById('cEffort').value;
+  const stream = document.getElementById('cStream').value === 'true';
+  const contextLines = 10; 
+  const apiKey = document.getElementById('cApiKey').value; // ⭐ 获取Key
+
+  try {
+    const r = await fetch('/api/admin/ciwei-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, temperature, maxTokens, reasoningEffort, stream, contextLines, apiKey }) // ⭐ 发送Key
+    });
+    if (r.ok) alert('✅ 参数已保存，刷新小c页面即可生效！');
+    else alert('保存失败');
+  } catch(e) { alert('网络错误'); }
 }
 
 async function saveSiteConfig() {
